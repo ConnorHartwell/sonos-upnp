@@ -10,16 +10,61 @@
 #include <chrono>
 #include <thread>
 #include <vector>
+#include <regex>
 #include "msearch.h"
 
 using namespace std;
 
-int main() {
-    vector<string> deviceList = msearch::search_for_devices();
-    for(int i = 0; i < deviceList.size(); i++) {
-        
+class UPnPDevice {
+public:
+    string loc;
+    string server;
+    string search_target;
+
+    UPnPDevice(string l, string serv, string st) {
+        loc = l;
+        server = serv;
+        search_target = st;
+    }
+};
+
+string getValueFromString(string fullStr, string matcher) {
+    regex location_regex = regex(matcher.append(":(.*)"), regex_constants::icase);
+    smatch match;
+    bool result = regex_search(fullStr, match, location_regex);
+    if(result == true) {
+        cout << "Found matches" << endl;
+        if(match.size() == 2) {
+            return match[1];
+        }
+        else {
+            return match[0];
+        }
+    }
+    else {
+        cout << "Didn't find matches for matcher: " << matcher << endl;
     }
 }
+
+UPnPDevice convert_msearch_response_to_device(string msearchResponse) {
+    return UPnPDevice(
+                getValueFromString(msearchResponse,"location"),
+                getValueFromString(msearchResponse,"server"),
+                getValueFromString(msearchResponse,"st")
+            );
+}
+
+int main() {
+    vector<string> deviceList = msearch::search_for_devices();
+    vector<UPnPDevice> devices;
+
+    for(int i = 0; i < deviceList.size(); i++) {
+        devices.push_back(convert_msearch_response_to_device(deviceList[i]));
+    }
+
+    cout << devices[0].loc << endl << devices[0].search_target << endl << devices[0].server;
+}
+
 
 vector<string> msearch::search_for_devices() {
     int sock;
@@ -70,14 +115,11 @@ vector<string> msearch::search_for_devices() {
                                     (struct sockaddr *)&recv_addr, &recv_addr_len);
         if (recv_len > 0) {
             buffer[recv_len] = '\0';
-            cout << "Received response:\n" << buffer  << endl;
             results.push_back(buffer);
         }
         this_thread::sleep_for(chrono::milliseconds(100));
     }
 
-    cout << "msearch finished" << endl;
-    cout << results.size();
     close(sock);
 
     return results;
